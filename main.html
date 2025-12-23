@@ -1,0 +1,578 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Aether | Generative Biology</title>
+    
+    <!-- React & ReactDOM -->
+    <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    
+    <!-- Babel -->
+    <script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'void': '#030303',
+                        'off-white': '#E4E4E7',
+                        'cinematic-red': '#FF3333',
+                        'concrete': '#18181B',
+                        'glass': 'rgba(255, 255, 255, 0.03)'
+                    },
+                    fontFamily: {
+                        'display': ['Syne', 'sans-serif'],
+                        'body': ['Manrope', 'sans-serif'],
+                        'mono': ['JetBrains Mono', 'monospace'],
+                    },
+                    fontSize: {
+                        'huge': '13vw',
+                    },
+                    letterSpacing: {
+                        'tightest': '-0.06em',
+                    },
+                    animation: {
+                        'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'dash': 'dash 2s linear infinite',
+                    },
+                    keyframes: {
+                        dash: {
+                            '0%': { strokeDashoffset: '100' },
+                            '100%': { strokeDashoffset: '0' },
+                        }
+                    }
+                }
+            }
+        }
+    </script>
+
+    <!-- Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=Manrope:wght@300;400;500;600&family=JetBrains+Mono:wght@300;400&display=swap" rel="stylesheet">
+    
+    <!-- Icons -->
+    <script src="https://unpkg.com/lucide@0.292.0"></script>
+
+    <style>
+        body {
+            background-color: #030303;
+            color: #E4E4E7;
+            overflow-x: hidden;
+            cursor: crosshair;
+        }
+
+        /* Noise Texture */
+        .noise-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            pointer-events: none;
+            z-index: 50;
+            opacity: 0.05;
+            background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
+        }
+
+        .text-stroke {
+            -webkit-text-stroke: 1px rgba(255, 255, 255, 0.6); 
+            color: transparent;
+        }
+        
+        ::-webkit-scrollbar { width: 6px; }
+        ::-webkit-scrollbar-track { background: #030303; }
+        ::-webkit-scrollbar-thumb { background: #333; border-radius: 3px; }
+        ::-webkit-scrollbar-thumb:hover { background: #FF3333; }
+
+        .bg-grid {
+            background-size: 60px 60px;
+            background-image: linear-gradient(to right, rgba(255, 255, 255, 0.03) 1px, transparent 1px),
+                              linear-gradient(to bottom, rgba(255, 255, 255, 0.03) 1px, transparent 1px);
+            mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
+        }
+        
+        /* Architecture Card Styles */
+        .arch-card {
+            transition: all 0.5s cubic-bezier(0.25, 1, 0.5, 1);
+            overflow: hidden;
+        }
+        
+        .nav-glass {
+            transition: all 0.3s ease;
+        }
+        .nav-glass.scrolled {
+            background: rgba(3, 3, 3, 0.7);
+            backdrop-filter: blur(12px);
+            -webkit-backdrop-filter: blur(12px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useEffect, useState } = React;
+
+        // --- Helper: Lucide Icon Wrapper ---
+        const Icon = ({ name, size = 20, className }) => {
+            const LucideIcon = window.lucide?.icons[name];
+            if (!LucideIcon) return null;
+            const [tag, attrs, children] = LucideIcon;
+            return (
+                <svg {...attrs} width={size} height={size} className={className}>
+                    {children.map(([childTag, childAttrs], i) => (
+                        React.createElement(childTag, { ...childAttrs, key: i })
+                    ))}
+                </svg>
+            );
+        };
+
+        // --- Components ---
+
+        const MagneticButton = ({ text, href, primary, icon }) => (
+            <a href={href} className={`
+                relative inline-flex items-center justify-center px-8 py-4 
+                font-mono text-xs uppercase tracking-widest transition-all duration-300
+                border border-white/20 hover:border-cinematic-red gap-3 group
+                ${primary ? 'bg-white text-black hover:bg-cinematic-red hover:text-white border-transparent' : 'hover:text-cinematic-red text-white'}
+            `}>
+                {text}
+                {icon && <Icon name={icon} size={14} className="group-hover:translate-x-1 transition-transform" />}
+            </a>
+        );
+
+        const SectionHeader = ({ num, title }) => (
+            <div className="flex items-baseline gap-6 mb-16 px-6 md:px-12 border-b border-white/10 pb-6">
+                <span className="font-mono text-xs text-cinematic-red">0{num}</span>
+                <h2 className="font-display text-4xl md:text-5xl uppercase tracking-tight">{title}</h2>
+            </div>
+        );
+
+        // --- VISUALIZATION COMPONENTS (New System Architecture) ---
+
+        const NeuralNetVisual = ({ active }) => (
+            <svg viewBox="0 0 200 120" className="w-full h-full opacity-80">
+                {/* Connections */}
+                <g stroke={active ? "#FF3333" : "#333"} strokeWidth="0.5" className={active ? "opacity-40" : "opacity-20"}>
+                    {[10, 30, 50, 70, 90].map((y1, i) => 
+                        [20, 40, 60, 80, 100].map((y2, j) => (
+                            <line key={`${i}-${j}`} x1="40" y1={y1 + 10} x2="160" y2={y2 + 10} />
+                        ))
+                    )}
+                </g>
+                
+                {/* Flowing Data (Only when active) */}
+                {active && [1, 2, 3].map((_, i) => (
+                    <circle key={i} r="2" fill="#fff">
+                        <animateMotion 
+                            dur={`${1 + i * 0.5}s`} 
+                            repeatCount="indefinite" 
+                            path={`M40 ${30 + i*20} L160 ${50 + i*10}`} 
+                        />
+                    </circle>
+                ))}
+
+                {/* Nodes Layer 1 */}
+                {[10, 30, 50, 70, 90].map((y, i) => (
+                    <circle key={`l1-${i}`} cx="40" cy={y + 10} r="3" fill={active ? "#fff" : "#666"} className={active ? "animate-pulse" : ""} />
+                ))}
+                
+                {/* Nodes Layer 2 */}
+                {[20, 40, 60, 80, 100].map((y, i) => (
+                    <circle key={`l2-${i}`} cx="160" cy={y + 10} r="3" fill={active ? "#FF3333" : "#666"} />
+                ))}
+            </svg>
+        );
+
+        const BeamSearchVisual = ({ active }) => (
+            <svg viewBox="0 0 200 120" className="w-full h-full">
+                {/* The "Tunnel" (GC Constraints) */}
+                <path d="M0 20 Q100 20 200 20" stroke="#333" strokeDasharray="4 2" fill="none" />
+                <path d="M0 100 Q100 100 200 100" stroke="#333" strokeDasharray="4 2" fill="none" />
+                
+                {active && (
+                    <text x="10" y="15" className="font-mono text-[6px] fill-gray-500 uppercase">GC &gt; 60% (Rejection Zone)</text>
+                )}
+
+                {/* Paths */}
+                {/* Path 1: Valid */}
+                <path d="M0 60 C50 60, 80 40, 120 50 S 180 60, 200 60" 
+                      stroke={active ? "#fff" : "#666"} fill="none" strokeWidth="2" 
+                      className={active ? "opacity-100" : "opacity-30"} />
+                
+                {/* Path 2: Rejected High */}
+                <path d="M0 60 C40 60, 60 10, 100 10" 
+                      stroke={active ? "#FF3333" : "#444"} fill="none" strokeWidth="1" 
+                      className={active ? "opacity-60" : "opacity-10"} />
+                {active && <circle cx="100" cy="10" r="2" fill="#FF3333" />}
+
+                {/* Path 3: Rejected Low */}
+                <path d="M0 60 C40 60, 60 110, 100 110" 
+                      stroke={active ? "#FF3333" : "#444"} fill="none" strokeWidth="1" 
+                      className={active ? "opacity-60" : "opacity-10"} />
+                {active && <circle cx="100" cy="110" r="2" fill="#FF3333" />}
+            </svg>
+        );
+
+        const DnaOutputVisual = ({ active }) => (
+            <svg viewBox="0 0 200 120" className="w-full h-full">
+                {/* Base Line */}
+                <line x1="10" y1="60" x2="190" y2="60" stroke="#333" strokeWidth="1" />
+
+                {/* DNA Blocks Assembling */}
+                {[...Array(8)].map((_, i) => {
+                    const color = i % 2 === 0 ? "#FF3333" : "#FFF";
+                    const x = 30 + i * 20;
+                    return (
+                        <g key={i} className={active ? "transition-all duration-500" : "opacity-30"}>
+                            <rect 
+                                x={x} 
+                                y={active ? 45 : 0} /* Fall effect */
+                                width="12" 
+                                height="30" 
+                                fill={active ? color : "#444"} 
+                                rx="2"
+                                style={{ transitionDelay: `${i * 100}ms` }}
+                            />
+                            {active && (
+                                <text x={x+3} y="65" fontSize="8" fill="black" fontWeight="bold" style={{ transitionDelay: `${i * 100}ms` }}>
+                                    {['A','T','G','C'][i%4]}
+                                </text>
+                            )}
+                        </g>
+                    )
+                })}
+            </svg>
+        );
+
+        const SystemArchitecture = () => {
+            const [hovered, setHovered] = useState(null);
+
+            return (
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-6 h-auto md:h-[450px]">
+                    {/* Module 1: Encoder */}
+                    <div 
+                        className={`arch-card border border-white/10 p-6 flex flex-col justify-between cursor-pointer relative bg-void group
+                            ${hovered === 0 ? 'border-cinematic-red/50 bg-cinematic-red/5' : 'hover:border-white/30'}
+                        `}
+                        onMouseEnter={() => setHovered(0)}
+                        onMouseLeave={() => setHovered(null)}
+                    >
+                        <div className="h-40 w-full mb-6 border border-white/5 bg-black/50 rounded flex items-center justify-center overflow-hidden">
+                            <NeuralNetVisual active={hovered === 0} />
+                        </div>
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="font-mono text-xs text-cinematic-red">STEP 01</span>
+                                <Icon name="Binary" size={16} className={hovered === 0 ? "text-white" : "text-gray-600"} />
+                            </div>
+                            <h3 className="font-display text-2xl uppercase mb-2 text-white">Neural<br/>Encoder</h3>
+                            <p className="font-mono text-xs text-gray-400 leading-relaxed">
+                                Input proteins are tokenized and mapped to 768-dim embeddings. 
+                                BigBird attention captures long-range structural dependencies (O(N)).
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Module 2: Constraints */}
+                    <div 
+                        className={`arch-card border border-white/10 p-6 flex flex-col justify-between cursor-pointer relative bg-void group
+                            ${hovered === 1 ? 'border-cinematic-red/50 bg-cinematic-red/5' : 'hover:border-white/30'}
+                        `}
+                        onMouseEnter={() => setHovered(1)}
+                        onMouseLeave={() => setHovered(null)}
+                    >
+                        <div className="h-40 w-full mb-6 border border-white/5 bg-black/50 rounded flex items-center justify-center overflow-hidden">
+                            <BeamSearchVisual active={hovered === 1} />
+                        </div>
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="font-mono text-xs text-cinematic-red">STEP 02</span>
+                                <Icon name="Cpu" size={16} className={hovered === 1 ? "text-white" : "text-gray-600"} />
+                            </div>
+                            <h3 className="font-display text-2xl uppercase mb-2 text-white">Constrained<br/>Tunnel</h3>
+                            <p className="font-mono text-xs text-gray-400 leading-relaxed">
+                                <strong>Augmented Lagrangian</strong> logic acts as a filter. Beams violating the 40-60% GC window or containing toxic motifs are pruned in real-time.
+                            </p>
+                        </div>
+                    </div>
+
+                    {/* Module 3: Output */}
+                    <div 
+                        className={`arch-card border border-white/10 p-6 flex flex-col justify-between cursor-pointer relative bg-void group
+                            ${hovered === 2 ? 'border-cinematic-red/50 bg-cinematic-red/5' : 'hover:border-white/30'}
+                        `}
+                        onMouseEnter={() => setHovered(2)}
+                        onMouseLeave={() => setHovered(null)}
+                    >
+                        <div className="h-40 w-full mb-6 border border-white/5 bg-black/50 rounded flex items-center justify-center overflow-hidden">
+                            <DnaOutputVisual active={hovered === 2} />
+                        </div>
+                        <div>
+                            <div className="flex justify-between items-center mb-2">
+                                <span className="font-mono text-xs text-cinematic-red">STEP 03</span>
+                                <Icon name="Dna" size={16} className={hovered === 2 ? "text-white" : "text-gray-600"} />
+                            </div>
+                            <h3 className="font-display text-2xl uppercase mb-2 text-white">Sequence<br/>Crystallization</h3>
+                            <p className="font-mono text-xs text-gray-400 leading-relaxed">
+                                Probabilities collapse into a stable CDS. Final output satisfies CAI maximization while ensuring manufacturability.
+                            </p>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
+        const BarChart = ({ label, value, max, color = "bg-white" }) => {
+            const width = (value / max) * 100;
+            return (
+                <div className="mb-6 group">
+                    <div className="flex justify-between font-mono text-xs uppercase text-gray-500 mb-2 group-hover:text-white transition-colors">
+                        <span>{label}</span>
+                        <span className="text-white">{value}</span>
+                    </div>
+                    <div className="h-2 w-full bg-white/10 overflow-hidden relative">
+                        <div 
+                            className={`h-full ${color} absolute top-0 left-0 transition-all duration-1000 ease-out`} 
+                            style={{ width: `${width}%` }}
+                        ></div>
+                    </div>
+                </div>
+            );
+        };
+
+        const MetricTile = ({ value, label, sub }) => (
+            <div className="p-6 border border-white/10 hover:bg-white/5 transition-colors group relative overflow-hidden">
+                <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Icon name="ArrowUpRight" size={12} className="text-cinematic-red"/>
+                </div>
+                <span className="font-display text-4xl md:text-5xl block mb-2 group-hover:text-white text-white/90 transition-colors">{value}</span>
+                <span className="font-mono text-xs text-cinematic-red uppercase block mb-1">{label}</span>
+                <span className="font-mono text-[10px] text-gray-600 uppercase">{sub}</span>
+            </div>
+        );
+
+        // --- Main App ---
+
+        const App = () => {
+            const [mounted, setMounted] = useState(false);
+            const [scrolled, setScrolled] = useState(false);
+
+            useEffect(() => {
+                setMounted(true);
+                const handleScroll = () => setScrolled(window.scrollY > 20);
+                window.addEventListener('scroll', handleScroll);
+                return () => window.removeEventListener('scroll', handleScroll);
+            }, []);
+
+            return (
+                <div className="relative min-h-screen selection:bg-cinematic-red selection:text-white">
+                    <div className="noise-overlay"></div>
+                    <div className="fixed inset-0 bg-grid pointer-events-none z-0"></div>
+
+                    {/* Nav */}
+                    <nav className={`fixed top-0 w-full z-40 px-6 md:px-12 py-6 flex justify-between items-center nav-glass ${scrolled ? 'scrolled' : ''}`}>
+                        <div>
+                            <span className="font-display font-bold text-xl tracking-tighter uppercase block">Aether</span>
+                            <span className="font-mono text-[10px] uppercase text-gray-400">Saketh Baddam / First Author</span>
+                        </div>
+                        <div className="hidden md:flex gap-8">
+                            <a href="#problem" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Context</a>
+                            <a href="#proof" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Proof</a>
+                            <a href="#tech" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Tech</a>
+                            <a href="#resources" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Resources</a>
+                        </div>
+                    </nav>
+
+                    {/* 1. Hero / Landing */}
+                    <header className="min-h-screen flex flex-col justify-center px-6 md:px-12 pt-20 relative">
+                        <div className={`transition-all duration-1000 ease-out ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20'}`}>
+                            <div className="mb-8 flex items-center gap-4">
+                                <span className="px-2 py-1 border border-cinematic-red text-cinematic-red font-mono text-[10px] uppercase tracking-widest">BioRxiv Preprint</span>
+                                <span className="font-mono text-[10px] text-gray-500 uppercase">2025.11.26.690826v1</span>
+                            </div>
+                            <h1 className="font-display text-huge leading-[0.85] font-bold uppercase tracking-tightest mix-blend-lighten mb-8">
+                                <span className="block text-stroke opacity-100 mb-2 text-6xl md:text-8xl">Generative</span>
+                                <span className="block text-white">Aether</span>
+                            </h1>
+                            <div className="max-w-2xl">
+                                <p className="font-mono text-sm text-gray-400 leading-relaxed text-justify mb-12">
+                                    <strong>Aether</strong>: Transformer-based codon optimization for <em>E. coli</em>. 
+                                    Balancing expression, stability, and manufacturability by solving the multi-objective problem: 
+                                    <strong>CAI + GC + tAI + Motifs</strong>.
+                                </p>
+                                <div className="flex gap-6">
+                                    <MagneticButton text="Read the Paper" href="#" primary icon="FileText" />
+                                    <MagneticButton text="View Code" href="#" icon="Github" />
+                                </div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* 2. The "What" (Problem & Solution) */}
+                    <section id="problem" className="py-32 border-t border-white/10 bg-void">
+                        <div className="px-6 md:px-12 grid grid-cols-1 md:grid-cols-2 gap-16">
+                            <div>
+                                <span className="font-mono text-xs text-cinematic-red uppercase tracking-widest mb-4 block">The Problem</span>
+                                <h2 className="font-display text-4xl md:text-5xl uppercase leading-tight mb-6">
+                                    Single-Metric<br/>Myopia
+                                </h2>
+                                <p className="font-mono text-sm text-gray-400 leading-relaxed">
+                                    Standard tools (like IDT or Genewiz) typically optimize for a single metric: Codon Adaptation Index (CAI). They often ignore structural stability, toxic repeats, and GC-content spikes, leading to sequences that score high in theory but fail in the wet lab.
+                                </p>
+                            </div>
+                            <div>
+                                <span className="font-mono text-xs text-cinematic-red uppercase tracking-widest mb-4 block">The Solution</span>
+                                <h2 className="font-display text-4xl md:text-5xl uppercase leading-tight mb-6">
+                                    Multi-Objective<br/>Generative Design
+                                </h2>
+                                <p className="font-mono text-sm text-gray-400 leading-relaxed">
+                                    Aether is an end-to-end generative pipeline. Instead of a lookup table, it uses a <strong>Transformer</strong> to learn the grammar of high-expression genes. We strictly enforce biological constraints (GC 40-60%, no repeats) during generation, ensuring manufacturability without sacrificing expression.
+                                </p>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 3. The "Proof" (Key Results) */}
+                    <section id="proof" className="py-32 border-t border-white/10 bg-concrete/10">
+                        <SectionHeader num="1" title="Benchmark Results" />
+
+                        <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 px-6 md:px-12">
+                            
+                            {/* Left: Key Metrics Grid */}
+                            <div>
+                                <h3 className="font-mono text-xs uppercase text-gray-500 mb-8 tracking-widest">Performance Gains (vs Original)</h3>
+                                <div className="grid grid-cols-2 gap-px bg-white/10 border border-white/10">
+                                    <MetricTile 
+                                        value="+55%" 
+                                        label="Recombinant CAI" 
+                                        sub="80 Industry Targets" 
+                                    />
+                                    <MetricTile 
+                                        value="+31%" 
+                                        label="Native CAI" 
+                                        sub="37k E. coli Genes" 
+                                    />
+                                    <MetricTile 
+                                        value="0.06" 
+                                        label="Neg. Cis-Elements" 
+                                        sub="Lowest among tools" 
+                                    />
+                                    <MetricTile 
+                                        value="100%" 
+                                        label="GC Compliance" 
+                                        sub="Hard Constraint Met" 
+                                    />
+                                </div>
+                            </div>
+
+                            {/* Right: Bar Charts */}
+                            <div>
+                                <h3 className="font-mono text-xs uppercase text-gray-500 mb-8 tracking-widest">Codon Adaptation Index (CAI) Comparison</h3>
+                                <div className="space-y-8 p-8 border border-white/5 bg-void">
+                                    <BarChart label="Aether (Ours)" value="0.901" max={1} color="bg-cinematic-red" />
+                                    <BarChart label="CodonTransformer" value="0.871" max={1} color="bg-white/40" />
+                                    <BarChart label="IDT (Commercial)" value="0.754" max={1} color="bg-white/40" />
+                                    <BarChart label="Original Sequence" value="0.580" max={1} color="bg-white/10" />
+                                </div>
+                                <div className="mt-4 flex justify-between font-mono text-[10px] text-gray-600">
+                                    <span>Dataset: 80 Recombinant Targets</span>
+                                    <span>Source: Table 1</span>
+                                </div>
+                            </div>
+                        </div>
+                    </section>
+
+                    {/* 4. The "How" (System Architecture) */}
+                    <section id="tech" className="py-32 border-t border-white/10 relative bg-void">
+                        <SectionHeader num="2" title="System Architecture" />
+                        
+                        <div className="px-6 md:px-12 mb-12">
+                            <p className="font-mono text-sm text-gray-400 max-w-2xl">
+                                Hover over the modules below to reveal the internal logic. This isn't a black-box API; I built the training pipeline, constraint logic, and decoding search from scratch.
+                            </p>
+                        </div>
+
+                        <div className="px-6 md:px-12">
+                            <SystemArchitecture />
+                        </div>
+                    </section>
+
+                    {/* 5. Links & Resources */}
+                    <section id="resources" className="py-32 border-t border-white/10">
+                        <SectionHeader num="3" title="Artifacts" />
+                        
+                        <div className="px-6 md:px-12 grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <a href="#" className="group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
+                                <div className="flex justify-between items-start mb-12">
+                                    <Icon name="FileText" size={32} />
+                                    <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                                <h3 className="font-display text-2xl uppercase">Preprint</h3>
+                                <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Read on BioRxiv</p>
+                            </a>
+                            <a href="#" className="group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
+                                <div className="flex justify-between items-start mb-12">
+                                    <Icon name="Github" size={32} />
+                                    <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                                <h3 className="font-display text-2xl uppercase">Repository</h3>
+                                <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Source Code & Data</p>
+                            </a>
+                            <a href="#" className="group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
+                                <div className="flex justify-between items-start mb-12">
+                                    <Icon name="Zap" size={32} />
+                                    <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                </div>
+                                <h3 className="font-display text-2xl uppercase">Demo</h3>
+                                <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Hugging Face Space</p>
+                            </a>
+                        </div>
+                    </section>
+
+                    {/* 6. About / Contact */}
+                    <footer className="py-32 border-t border-white/10 px-6 md:px-12 bg-concrete/20">
+                        <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
+                            <div>
+                                <h2 className="font-display text-3xl uppercase mb-6">Built by Saketh Baddam</h2>
+                                <p className="font-mono text-sm text-gray-400 max-w-md leading-relaxed mb-8">
+                                    I'm a high school student in Cedar Falls, Iowa, building at the intersection of deep learning and synthetic biology. Aether is my first first-author paper.
+                                </p>
+                                <p className="font-mono text-xs text-cinematic-red uppercase tracking-widest">
+                                    Working on v2 (Multi-objective + Multi-species)
+                                </p>
+                            </div>
+
+                            <div className="flex flex-col items-start md:items-end justify-between">
+                                <a href="mailto:sakethbaddam10@gmail.com" className="font-display text-2xl md:text-3xl hover:text-cinematic-red transition-colors mb-8">
+                                    sakethbaddam10@gmail.com
+                                </a>
+                                <div className="flex gap-6 font-mono text-xs uppercase tracking-widest text-gray-500">
+                                    <a href="#" className="hover:text-white transition-colors">GitHub</a>
+                                    <a href="#" className="hover:text-white transition-colors">Twitter</a>
+                                    <a href="#" className="hover:text-white transition-colors">LinkedIn</a>
+                                </div>
+                            </div>
+                        </div>
+                        
+                        <div className="mt-24 pt-8 border-t border-white/5 flex justify-between font-mono text-[10px] text-gray-600 uppercase">
+                            <span>© 2025 Saketh Baddam</span>
+                            <span>Design: Cinematic Brutalist</span>
+                        </div>
+                    </footer>
+                </div>
+            );
+        };
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<App />);
+    </script>
+</body>
+</html>
