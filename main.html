@@ -2,8 +2,8 @@
 <html lang="en">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Aether | Generative Biology</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Exprimo | Generative Biology</title>
     
     <!-- React & ReactDOM -->
     <script src="https://unpkg.com/react@18/umd/react.production.min.js" crossorigin></script>
@@ -32,7 +32,7 @@
                         'mono': ['JetBrains Mono', 'monospace'],
                     },
                     fontSize: {
-                        'huge': '13vw',
+                        'huge': 'clamp(3rem, 13vw, 12rem)', // Responsive clamp
                     },
                     letterSpacing: {
                         'tightest': '-0.06em',
@@ -40,11 +40,16 @@
                     animation: {
                         'flow': 'flow 2s linear infinite',
                         'pulse-slow': 'pulse 4s cubic-bezier(0.4, 0, 0.6, 1) infinite',
+                        'float': 'float 6s ease-in-out infinite',
                     },
                     keyframes: {
                         flow: {
                             '0%': { strokeDashoffset: '24' },
                             '100%': { strokeDashoffset: '0' },
+                        },
+                        float: {
+                            '0%, 100%': { transform: 'translateY(0)' },
+                            '50%': { transform: 'translateY(-10px)' },
                         }
                     }
                 }
@@ -65,7 +70,12 @@
             background-color: #030303;
             color: #E4E4E7;
             overflow-x: hidden;
-            cursor: crosshair;
+            -webkit-tap-highlight-color: transparent;
+        }
+
+        /* Smooth Scroll behavior */
+        html {
+            scroll-behavior: smooth;
         }
 
         /* Noise Texture */
@@ -81,7 +91,6 @@
             background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='noiseFilter'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.7' numOctaves='3' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23noiseFilter)'/%3E%3C/svg%3E");
         }
 
-        /* Typography Utilities */
         .text-stroke {
             -webkit-text-stroke: 1px rgba(255, 255, 255, 0.5); 
             color: transparent;
@@ -101,41 +110,50 @@
             mask-image: linear-gradient(to bottom, black 40%, transparent 100%);
         }
         
-        /* Live Architecture Styles */
-        .node-card {
+        /* Navigation Frosted Glass */
+        .nav-glass {
             transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
         }
-        .node-card:hover, .node-card:active {
-            transform: translateY(-5px);
-            box-shadow: 0 20px 40px -10px rgba(255, 51, 51, 0.15);
-            border-color: rgba(255, 51, 51, 0.5);
-        }
-        .wire-path {
-            stroke-dasharray: 4 4;
-            animation: flow 1s linear infinite;
-            opacity: 0.3;
-        }
-        .node-active .wire-path {
-            stroke: #FF3333;
-            opacity: 1;
-        }
-        
-        .glow-text {
-            text-shadow: 0 0 20px rgba(255, 51, 51, 0.5);
+        .nav-glass.scrolled {
+            background: rgba(3, 3, 3, 0.85);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+            padding-top: 1rem;
+            padding-bottom: 1rem;
         }
 
-        .nav-glass {
-            transition: all 0.3s ease;
+        /* Mobile Menu */
+        .mobile-menu-enter {
+            opacity: 0;
+            transform: translateY(-20px);
         }
-        .nav-glass.scrolled {
-            background: rgba(3, 3, 3, 0.8);
-            backdrop-filter: blur(12px);
-            -webkit-backdrop-filter: blur(12px);
-            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
+        .mobile-menu-enter-active {
+            opacity: 1;
+            transform: translateY(0);
+            transition: opacity 300ms, transform 300ms;
         }
-        .mobile-menu-overlay {
-            background: rgba(3, 3, 3, 0.95);
-            backdrop-filter: blur(16px);
+        .mobile-menu-exit {
+            opacity: 1;
+            transform: translateY(0);
+        }
+        .mobile-menu-exit-active {
+            opacity: 0;
+            transform: translateY(-20px);
+            transition: opacity 300ms, transform 300ms;
+        }
+
+        /* Fade Up Utility */
+        .fade-in-section {
+            opacity: 0;
+            transform: translateY(20px);
+            transition: opacity 0.8s cubic-bezier(0.16, 1, 0.3, 1), transform 0.8s cubic-bezier(0.16, 1, 0.3, 1);
+            will-change: opacity, visibility;
+        }
+        .fade-in-section.is-visible {
+            opacity: 1;
+            transform: none;
+            visibility: visible;
         }
     </style>
 </head>
@@ -159,14 +177,47 @@
             );
         };
 
+        // --- Animation Hooks ---
+        const useIntersectionObserver = () => {
+            const [isVisible, setIsVisible] = useState(false);
+            const domRef = useRef();
+
+            useEffect(() => {
+                const observer = new IntersectionObserver(entries => {
+                    entries.forEach(entry => setIsVisible(entry.isIntersecting));
+                });
+                if (domRef.current) observer.observe(domRef.current);
+                return () => observer.disconnect();
+            }, []);
+
+            return [domRef, isVisible];
+        };
+
+        const FadeIn = ({ children, delay = 0, className = "" }) => {
+            const [ref, isVisible] = useIntersectionObserver();
+            return (
+                <div
+                    ref={ref}
+                    className={`fade-in-section ${isVisible ? 'is-visible' : ''} ${className}`}
+                    style={{ transitionDelay: `${delay}ms` }}
+                >
+                    {children}
+                </div>
+            );
+        };
+
         // --- Components ---
 
         const MagneticButton = ({ text, href, primary, icon }) => (
             <a href={href} className={`
                 relative inline-flex items-center justify-center px-8 py-4 
-                font-mono text-xs uppercase tracking-widest transition-all duration-300
-                border border-white/20 hover:border-cinematic-red gap-3 group
-                ${primary ? 'bg-white text-black hover:bg-cinematic-red hover:text-white border-transparent' : 'hover:text-cinematic-red text-white'}
+                font-mono text-xs uppercase tracking-widest transition-all duration-200
+                border border-white/20 rounded-sm
+                active:scale-95 transform
+                group gap-3
+                ${primary 
+                    ? 'bg-white text-black hover:bg-cinematic-red hover:text-white border-transparent shadow-[0_0_20px_rgba(255,255,255,0.2)] hover:shadow-[0_0_30px_rgba(255,51,51,0.4)]' 
+                    : 'hover:border-cinematic-red text-white hover:text-cinematic-red hover:bg-cinematic-red/5'}
             `}>
                 {text}
                 {icon && <Icon name={icon} size={14} className="group-hover:translate-x-1 transition-transform" />}
@@ -174,13 +225,13 @@
         );
 
         const SectionHeader = ({ num, title }) => (
-            <div className="flex items-baseline gap-6 mb-16 px-6 md:px-12 border-b border-white/10 pb-6">
+            <div className="flex items-baseline gap-4 md:gap-6 mb-12 md:mb-16 px-6 md:px-12 border-b border-white/10 pb-6">
                 <span className="font-mono text-xs text-cinematic-red">0{num}</span>
-                <h2 className="font-display text-4xl md:text-5xl uppercase tracking-tight">{title}</h2>
+                <h2 className="font-display text-3xl md:text-5xl uppercase tracking-tight">{title}</h2>
             </div>
         );
 
-        // --- VISUALIZATION COMPONENTS ---
+        // --- Visualizations ---
 
         const NeuralNetVisual = ({ active }) => (
             <svg viewBox="0 0 200 120" className="w-full h-full opacity-80">
@@ -209,12 +260,10 @@
             <svg viewBox="0 0 200 120" className="w-full h-full">
                 <path d="M0 20 Q100 20 200 20" stroke="#333" strokeDasharray="4 2" fill="none" />
                 <path d="M0 100 Q100 100 200 100" stroke="#333" strokeDasharray="4 2" fill="none" />
-                {active && <text x="10" y="15" className="font-mono text-[6px] fill-gray-500 uppercase">GC &gt; 60% (Rejection Zone)</text>}
+                {active && <text x="10" y="15" className="font-mono text-[6px] fill-gray-500 uppercase">GC &gt; 60%</text>}
                 <path d="M0 60 C50 60, 80 40, 120 50 S 180 60, 200 60" stroke={active ? "#fff" : "#666"} fill="none" strokeWidth="2" className={active ? "opacity-100" : "opacity-30"} />
                 <path d="M0 60 C40 60, 60 10, 100 10" stroke={active ? "#FF3333" : "#444"} fill="none" strokeWidth="1" className={active ? "opacity-60" : "opacity-10"} />
                 {active && <circle cx="100" cy="10" r="2" fill="#FF3333" />}
-                <path d="M0 60 C40 60, 60 110, 100 110" stroke={active ? "#FF3333" : "#444"} fill="none" strokeWidth="1" className={active ? "opacity-60" : "opacity-10"} />
-                {active && <circle cx="100" cy="110" r="2" fill="#FF3333" />}
             </svg>
         );
 
@@ -234,7 +283,7 @@
             </svg>
         );
 
-        const LiveArchitecture = () => {
+        const InteractiveArch = () => {
             const [stage, setStage] = useState(0);
             const [hovered, setHovered] = useState(null);
 
@@ -247,14 +296,17 @@
             }, [hovered]);
 
             const nodes = [
-                { id: 0, title: "Input Encoding", icon: "Binary", stats: [{ label: "Format", val: "FASTA/Amino" }, { label: "Context", val: "BigBird Attn" }, { label: "Dim", val: "768 Embed" }], status: "Tokenizing..." },
-                { id: 1, title: "Constrained Beam", icon: "Cpu", stats: [{ label: "Logic", val: "Aug. Lagrangian" }, { label: "Window", val: "40-60% GC" }, { label: "Beam", val: "Size 5" }], status: "Optimizing..." },
-                { id: 2, title: "Optimized CDS", icon: "Dna", stats: [{ label: "CAI", val: "> 0.90" }, { label: "Repeats", val: "Filtered" }, { label: "Format", val: "DNA" }], status: "Complete" }
+                { id: 0, title: "Input Encoding", icon: "Binary", stats: [{ label: "Format", val: "FASTA/Amino" }, { label: "Context", val: "BigBird Attn" }], status: "Tokenizing..." },
+                { id: 1, title: "Constrained Beam", icon: "Cpu", stats: [{ label: "Logic", val: "Aug. Lagrangian" }, { label: "Window", val: "40-60% GC" }], status: "Optimizing..." },
+                { id: 2, title: "Optimized CDS", icon: "Dna", stats: [{ label: "CAI", val: "> 0.90" }, { label: "Repeats", val: "Filtered" }], status: "Complete" }
             ];
 
             return (
                 <div className="w-full">
-                    <div className="flex flex-col lg:flex-row gap-4 relative justify-between items-stretch min-h-[300px]">
+                    {/* Visual Pipeline */}
+                    <div className="flex flex-col lg:flex-row gap-6 relative justify-between items-stretch lg:min-h-[400px]">
+                        
+                        {/* Wires (Desktop Only) */}
                         <div className="absolute top-1/2 left-0 w-full h-px hidden lg:block z-0">
                             <svg className="w-full h-10 overflow-visible" style={{ marginTop: '-5px' }}>
                                 <line x1="0" y1="5" x2="100%" y2="5" stroke="#333" strokeWidth="1" />
@@ -272,29 +324,28 @@
                                 <div 
                                     key={i}
                                     className={`
-                                        node-card relative z-10 flex-1 p-8 border bg-void
+                                        node-card relative z-10 flex-1 p-6 md:p-8 border bg-void
                                         flex flex-col justify-between cursor-pointer
                                         ${isActive ? 'border-cinematic-red/50 bg-cinematic-red/5' : 'border-white/10'}
                                         ${isDim ? 'opacity-30 blur-[1px]' : 'opacity-100'}
                                     `}
                                     onMouseEnter={() => setHovered(i)}
                                     onMouseLeave={() => setHovered(null)}
-                                    onClick={() => setHovered(i === hovered ? null : i)} // Tap to toggle on mobile
+                                    onClick={() => setHovered(i === hovered ? null : i)}
                                 >
                                     <div>
                                         <div className="flex justify-between items-start mb-6">
                                             <div className={`p-3 rounded border ${isActive ? 'border-cinematic-red bg-cinematic-red text-white' : 'border-white/10 bg-white/5 text-gray-400'}`}>
-                                                <Icon name={node.icon} size={24} />
+                                                <Icon name={node.icon} size={20} />
                                             </div>
                                             <span className={`font-mono text-[10px] uppercase tracking-widest ${isActive ? 'text-cinematic-red animate-pulse' : 'text-gray-600'}`}>
                                                 {isActive ? node.status : `0${i+1}`}
                                             </span>
                                         </div>
-                                        <h3 className="font-display text-xl uppercase mb-4">{node.title}</h3>
+                                        <h3 className="font-display text-lg md:text-xl uppercase mb-4">{node.title}</h3>
                                     </div>
                                     
-                                    {/* Mobile: Always show components if active, desktop shows based on hover/state */}
-                                    <div className="space-y-3 font-mono text-xs">
+                                    <div className="space-y-3 font-mono text-xs mb-4">
                                         {node.stats.map((stat, idx) => (
                                             <div key={idx} className="flex justify-between border-b border-white/5 pb-1">
                                                 <span className="text-gray-500">{stat.label}</span>
@@ -302,8 +353,8 @@
                                             </div>
                                         ))}
                                     </div>
-                                    {/* Visual Component Render */}
-                                    <div className="mt-4 h-24 border border-white/5 bg-black/50 rounded overflow-hidden">
+                                    
+                                    <div className="h-24 md:h-32 border border-white/5 bg-black/50 rounded overflow-hidden relative">
                                         {i === 0 && <NeuralNetVisual active={isActive} />}
                                         {i === 1 && <BeamSearchVisual active={isActive} />}
                                         {i === 2 && <DnaOutputVisual active={isActive} />}
@@ -312,9 +363,11 @@
                             );
                         })}
                     </div>
-                    <div className="mt-4 p-4 border border-white/10 bg-black/50 font-mono text-xs text-gray-400 flex items-center gap-4">
-                        <span className="text-cinematic-red animate-pulse">●</span>
-                        <span className="uppercase tracking-widest text-[10px]">System Log:</span>
+                    
+                    {/* Console Output */}
+                    <div className="mt-6 p-4 border border-white/10 bg-black/50 font-mono text-[10px] md:text-xs text-gray-400 flex items-center gap-4 overflow-hidden whitespace-nowrap">
+                        <span className="text-cinematic-red animate-pulse flex-shrink-0">●</span>
+                        <span className="uppercase tracking-widest flex-shrink-0">Log:</span>
                         <span className="text-white truncate">
                             {stage === 0 && "> Ingesting Sequence: M K L S V ..."}
                             {stage === 1 && "> Enforcing Constraints: GC ∈ [0.4, 0.6] ..."}
@@ -333,7 +386,7 @@
                         <span>{label}</span>
                         <span className="text-white">{value}</span>
                     </div>
-                    <div className="h-2 w-full bg-white/10 overflow-hidden relative">
+                    <div className="h-2 w-full bg-white/10 overflow-hidden relative rounded-sm">
                         <div 
                             className={`h-full ${color} absolute top-0 left-0 transition-all duration-1000 ease-out`} 
                             style={{ width: `${width}%` }}
@@ -344,7 +397,7 @@
         };
 
         const MetricTile = ({ value, label, sub }) => (
-            <div className="p-6 border border-white/10 hover:bg-white/5 transition-colors group relative overflow-hidden">
+            <div className="p-6 border border-white/10 hover:bg-white/5 transition-colors group relative overflow-hidden active:scale-95 transform duration-200">
                 <div className="absolute top-0 right-0 p-2 opacity-0 group-hover:opacity-100 transition-opacity">
                     <Icon name="ArrowUpRight" size={12} className="text-cinematic-red"/>
                 </div>
@@ -368,167 +421,200 @@
                 return () => window.removeEventListener('scroll', handleScroll);
             }, []);
 
+            const toggleMenu = () => setMobileMenuOpen(!mobileMenuOpen);
+
             return (
                 <div className="relative min-h-screen selection:bg-cinematic-red selection:text-white">
                     <div className="noise-overlay"></div>
                     <div className="fixed inset-0 bg-grid pointer-events-none z-0"></div>
 
                     {/* Nav */}
-                    <nav className={`fixed top-0 w-full z-40 px-6 md:px-12 py-6 flex justify-between items-center nav-glass ${scrolled ? 'scrolled' : ''}`}>
-                        <div>
-                            <span className="font-display font-bold text-xl tracking-tighter uppercase block">Aether</span>
-                            <span className="font-mono text-[10px] uppercase text-gray-400">Saketh Baddam / First Author</span>
+                    <nav className={`fixed top-0 w-full z-40 px-6 md:px-12 py-4 md:py-6 flex justify-between items-center nav-glass ${scrolled ? 'scrolled' : ''}`}>
+                        <div className="flex flex-col">
+                            <span className="font-display font-bold text-lg md:text-xl tracking-tighter uppercase block">Aether</span>
+                            <span className="font-mono text-[8px] md:text-[10px] uppercase text-gray-400">Saketh Baddam / First Author</span>
                         </div>
                         
                         {/* Desktop Links */}
                         <div className="hidden md:flex gap-8">
-                            <a href="#problem" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Context</a>
-                            <a href="#proof" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Proof</a>
-                            <a href="#tech" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Tech</a>
-                            <a href="#resources" className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors">Resources</a>
+                            {['Context', 'Proof', 'Tech', 'Resources'].map((item) => (
+                                <a 
+                                    key={item} 
+                                    href={`#${item.toLowerCase()}`} 
+                                    className="font-mono text-xs uppercase tracking-widest hover:text-cinematic-red transition-colors relative group"
+                                >
+                                    {item}
+                                    <span className="absolute -bottom-1 left-0 w-0 h-px bg-cinematic-red transition-all duration-300 group-hover:w-full"></span>
+                                </a>
+                            ))}
                         </div>
 
                         {/* Mobile Menu Toggle */}
-                        <div className="md:hidden text-white cursor-pointer z-50" onClick={() => setMobileMenuOpen(!mobileMenuOpen)}>
+                        <div className="md:hidden text-white cursor-pointer z-50 p-2" onClick={toggleMenu}>
                             <Icon name={mobileMenuOpen ? "X" : "Menu"} size={24} />
                         </div>
                     </nav>
 
                     {/* Mobile Menu Overlay */}
                     {mobileMenuOpen && (
-                        <div className="fixed inset-0 z-30 mobile-menu-overlay flex flex-col items-center justify-center gap-8 md:hidden animate-fade-in">
-                            <a href="#problem" onClick={() => setMobileMenuOpen(false)} className="font-display text-2xl uppercase hover:text-cinematic-red">Context</a>
-                            <a href="#proof" onClick={() => setMobileMenuOpen(false)} className="font-display text-2xl uppercase hover:text-cinematic-red">Proof</a>
-                            <a href="#tech" onClick={() => setMobileMenuOpen(false)} className="font-display text-2xl uppercase hover:text-cinematic-red">Tech</a>
-                            <a href="#resources" onClick={() => setMobileMenuOpen(false)} className="font-display text-2xl uppercase hover:text-cinematic-red">Resources</a>
+                        <div className="fixed inset-0 z-30 bg-black/95 backdrop-blur-xl flex flex-col items-center justify-center gap-8 md:hidden animate-[fadeIn_0.3s_ease-out]">
+                            {['Context', 'Proof', 'Tech', 'Resources'].map((item) => (
+                                <a 
+                                    key={item} 
+                                    href={`#${item.toLowerCase()}`} 
+                                    onClick={() => setMobileMenuOpen(false)} 
+                                    className="font-display text-3xl uppercase hover:text-cinematic-red"
+                                >
+                                    {item}
+                                </a>
+                            ))}
                         </div>
                     )}
 
                     {/* 1. Hero / Landing */}
                     <header className="min-h-screen flex flex-col justify-center px-6 md:px-12 pt-20 relative">
-                        <div className={`transition-all duration-1000 ease-out ${mounted ? 'opacity-100 translate-y-0' : 'opacity-0 translate-y-20'}`}>
+                        <FadeIn delay={100}>
                             <div className="mb-8 flex items-center gap-4">
                                 <span className="px-2 py-1 border border-cinematic-red text-cinematic-red font-mono text-[10px] uppercase tracking-widest">BioRxiv Preprint</span>
                                 <span className="font-mono text-[10px] text-gray-500 uppercase">2025.11.26.690826v2</span>
                             </div>
+                        </FadeIn>
+                        
+                        <FadeIn delay={200}>
                             <h1 className="font-display text-huge leading-[0.85] font-bold uppercase tracking-tightest mix-blend-lighten mb-8">
-                                <span className="block text-stroke opacity-100 mb-2 text-6xl md:text-8xl">Generative</span>
+                                <span className="block text-stroke opacity-100 mb-2 lg:text-8xl md:text-7xl text-5xl">Generative</span>
                                 <span className="block text-white">Aether</span>
                             </h1>
+                        </FadeIn>
+
+                        <FadeIn delay={400}>
                             <div className="max-w-2xl">
                                 <p className="font-mono text-sm text-gray-400 leading-relaxed text-justify mb-12">
-                                    <strong>Aether</strong>: Transformer-based codon optimization for <em>E. coli</em>. 
+                                    Transformer-based codon optimization for <em>E. coli</em>. 
                                     Balancing expression, stability, and manufacturability by solving the multi-objective problem: 
                                     <strong>CAI + GC + tAI + Motifs</strong>.
                                 </p>
-                                <div className="flex gap-6">
+                                <div className="flex flex-col sm:flex-row gap-6">
                                     <MagneticButton text="Read the Paper" href="https://www.biorxiv.org/content/10.1101/2025.11.26.690826v2" primary icon="FileText" />
                                     <MagneticButton text="View Code" href="https://github.com/SAKETH11111/ColiFormer" icon="Github" />
                                 </div>
                             </div>
-                        </div>
+                        </FadeIn>
                     </header>
 
                     {/* 2. The "What" */}
-                    <section id="problem" className="py-32 border-t border-white/10 bg-void">
-                        <div className="px-6 md:px-12 grid grid-cols-1 md:grid-cols-2 gap-16">
-                            <div>
-                                <span className="font-mono text-xs text-cinematic-red uppercase tracking-widest mb-4 block">The Problem</span>
-                                <h2 className="font-display text-4xl md:text-5xl uppercase leading-tight mb-6">
-                                    Single-Metric<br/>Myopia
-                                </h2>
-                                <p className="font-mono text-sm text-gray-400 leading-relaxed">
-                                    Standard tools (like IDT or Genewiz) typically optimize for a single metric: Codon Adaptation Index (CAI). They often ignore structural stability, toxic repeats, and GC-content spikes, leading to sequences that score high in theory but fail in the wet lab.
-                                </p>
+                    <section id="context" className="py-24 md:py-32 border-t border-white/10 bg-void">
+                        <FadeIn>
+                            <div className="px-6 md:px-12 grid grid-cols-1 md:grid-cols-2 gap-16">
+                                <div>
+                                    <span className="font-mono text-xs text-cinematic-red uppercase tracking-widest mb-4 block">The Problem</span>
+                                    <h2 className="font-display text-3xl md:text-5xl uppercase leading-tight mb-6">
+                                        Single-Metric<br/>Myopia
+                                    </h2>
+                                    <p className="font-mono text-sm text-gray-400 leading-relaxed">
+                                        Standard tools (like IDT or Genewiz) typically optimize for a single metric: Codon Adaptation Index (CAI). They often ignore structural stability, toxic repeats, and GC-content spikes, leading to sequences that score high in theory but fail in the wet lab.
+                                    </p>
+                                </div>
+                                <div>
+                                    <span className="font-mono text-xs text-cinematic-red uppercase tracking-widest mb-4 block">The Solution</span>
+                                    <h2 className="font-display text-3xl md:text-5xl uppercase leading-tight mb-6">
+                                        Multi-Objective<br/>Generative Design
+                                    </h2>
+                                    <p className="font-mono text-sm text-gray-400 leading-relaxed">
+                                        Aether is an end-to-end generative pipeline. Instead of a lookup table, it uses a <strong>Transformer</strong> to learn the grammar of high-expression genes. We strictly enforce biological constraints (GC 40-60%, no repeats) during generation, ensuring manufacturability without sacrificing expression.
+                                    </p>
+                                </div>
                             </div>
-                            <div>
-                                <span className="font-mono text-xs text-cinematic-red uppercase tracking-widest mb-4 block">The Solution</span>
-                                <h2 className="font-display text-4xl md:text-5xl uppercase leading-tight mb-6">
-                                    Multi-Objective<br/>Generative Design
-                                </h2>
-                                <p className="font-mono text-sm text-gray-400 leading-relaxed">
-                                    Aether is an end-to-end generative pipeline. Instead of a lookup table, it uses a <strong>Transformer</strong> to learn the grammar of high-expression genes. We strictly enforce biological constraints (GC 40-60%, no repeats) during generation, ensuring manufacturability without sacrificing expression.
-                                </p>
-                            </div>
-                        </div>
+                        </FadeIn>
                     </section>
 
                     {/* 3. The "Proof" */}
-                    <section id="proof" className="py-32 border-t border-white/10 bg-concrete/10">
+                    <section id="proof" className="py-24 md:py-32 border-t border-white/10 bg-concrete/10">
                         <SectionHeader num="1" title="Benchmark Results" />
 
                         <div className="grid grid-cols-1 lg:grid-cols-2 gap-16 px-6 md:px-12">
-                            <div>
-                                <h3 className="font-mono text-xs uppercase text-gray-500 mb-8 tracking-widest">Performance Gains (vs Original)</h3>
-                                <div className="grid grid-cols-2 gap-px bg-white/10 border border-white/10">
-                                    <MetricTile value="+55%" label="Recombinant CAI" sub="80 Industry Targets" />
-                                    <MetricTile value="+31%" label="Native CAI" sub="37k E. coli Genes" />
-                                    <MetricTile value="0.06" label="Neg. Cis-Elements" sub="Lowest among tools" />
-                                    <MetricTile value="100%" label="GC Compliance" sub="Hard Constraint Met" />
+                            <FadeIn delay={100}>
+                                <div>
+                                    <h3 className="font-mono text-xs uppercase text-gray-500 mb-8 tracking-widest">Performance Gains (vs Original)</h3>
+                                    <div className="grid grid-cols-2 gap-px bg-white/10 border border-white/10">
+                                        <MetricTile value="+55%" label="Recombinant CAI" sub="80 Industry Targets" />
+                                        <MetricTile value="+31%" label="Native CAI" sub="37k E. coli Genes" />
+                                        <MetricTile value="0.06" label="Neg. Cis-Elements" sub="Lowest among tools" />
+                                        <MetricTile value="100%" label="GC Compliance" sub="Hard Constraint Met" />
+                                    </div>
                                 </div>
-                            </div>
-                            <div>
-                                <h3 className="font-mono text-xs uppercase text-gray-500 mb-8 tracking-widest">Codon Adaptation Index (CAI) Comparison</h3>
-                                <div className="space-y-8 p-8 border border-white/5 bg-void">
-                                    <BarChart label="Aether (Ours)" value="0.901" max={1} color="bg-cinematic-red" />
-                                    <BarChart label="CodonTransformer" value="0.871" max={1} color="bg-white/40" />
-                                    <BarChart label="IDT (Commercial)" value="0.754" max={1} color="bg-white/40" />
-                                    <BarChart label="Original Sequence" value="0.580" max={1} color="bg-white/10" />
+                            </FadeIn>
+                            
+                            <FadeIn delay={300}>
+                                <div>
+                                    <h3 className="font-mono text-xs uppercase text-gray-500 mb-8 tracking-widest">Codon Adaptation Index (CAI) Comparison</h3>
+                                    <div className="space-y-8 p-8 border border-white/5 bg-void">
+                                        <BarChart label="Aether (Ours)" value="0.901" max={1} color="bg-cinematic-red" />
+                                        <BarChart label="CodonTransformer" value="0.871" max={1} color="bg-white/40" />
+                                        <BarChart label="IDT (Commercial)" value="0.754" max={1} color="bg-white/40" />
+                                        <BarChart label="Original Sequence" value="0.580" max={1} color="bg-white/10" />
+                                    </div>
+                                    <div className="mt-4 flex justify-between font-mono text-[10px] text-gray-600">
+                                        <span>Dataset: 80 Recombinant Targets</span>
+                                        <span>Source: Table 1</span>
+                                    </div>
                                 </div>
-                                <div className="mt-4 flex justify-between font-mono text-[10px] text-gray-600">
-                                    <span>Dataset: 80 Recombinant Targets</span>
-                                    <span>Source: Table 1</span>
-                                </div>
-                            </div>
+                            </FadeIn>
                         </div>
                     </section>
 
                     {/* 4. The "How" */}
-                    <section id="tech" className="py-32 border-t border-white/10 relative bg-void">
+                    <section id="tech" className="py-24 md:py-32 border-t border-white/10 relative bg-void">
                         <SectionHeader num="2" title="System Architecture" />
                         <div className="px-6 md:px-12 mb-12">
                             <p className="font-mono text-sm text-gray-400 max-w-2xl">
-                                Hover over (or tap) the modules below to reveal the internal logic. This isn't a black-box API; I built the training pipeline, constraint logic, and decoding search from scratch.
+                                Tap modules to explore the logic. This isn't a black-box API; I built the training pipeline, constraint logic, and decoding search from scratch.
                             </p>
                         </div>
                         <div className="px-6 md:px-12">
-                            <LiveArchitecture />
+                            <InteractiveArch />
                         </div>
                     </section>
 
                     {/* 5. Links & Resources */}
-                    <section id="resources" className="py-32 border-t border-white/10">
+                    <section id="resources" className="py-24 md:py-32 border-t border-white/10">
                         <SectionHeader num="3" title="Artifacts" />
                         <div className="px-6 md:px-12 grid grid-cols-1 md:grid-cols-3 gap-6">
-                            <a href="https://www.biorxiv.org/content/10.1101/2025.11.26.690826v2" className="group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
-                                <div className="flex justify-between items-start mb-12">
-                                    <Icon name="FileText" size={32} />
-                                    <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                                <h3 className="font-display text-2xl uppercase">Preprint</h3>
-                                <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Read on BioRxiv</p>
-                            </a>
-                            <a href="https://github.com/SAKETH11111/ColiFormer" className="group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
-                                <div className="flex justify-between items-start mb-12">
-                                    <Icon name="Github" size={32} />
-                                    <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                                <h3 className="font-display text-2xl uppercase">Repository</h3>
-                                <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Source Code & Data</p>
-                            </a>
-                            <a href="https://huggingface.co/spaces/saketh11/ColiFormer" className="group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
-                                <div className="flex justify-between items-start mb-12">
-                                    <Icon name="Zap" size={32} />
-                                    <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
-                                </div>
-                                <h3 className="font-display text-2xl uppercase">Demo</h3>
-                                <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Hugging Face Space</p>
-                            </a>
+                            <FadeIn delay={0}>
+                                <a href="https://www.biorxiv.org/content/10.1101/2025.11.26.690826v2" className="block group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
+                                    <div className="flex justify-between items-start mb-12">
+                                        <Icon name="FileText" size={32} />
+                                        <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    <h3 className="font-display text-2xl uppercase">Preprint</h3>
+                                    <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Read on BioRxiv</p>
+                                </a>
+                            </FadeIn>
+                            <FadeIn delay={150}>
+                                <a href="https://github.com/SAKETH11111/ColiFormer" className="block group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
+                                    <div className="flex justify-between items-start mb-12">
+                                        <Icon name="Github" size={32} />
+                                        <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    <h3 className="font-display text-2xl uppercase">Repository</h3>
+                                    <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Source Code & Data</p>
+                                </a>
+                            </FadeIn>
+                            <FadeIn delay={300}>
+                                <a href="https://huggingface.co/spaces/saketh11/ColiFormer" className="block group border border-white/10 p-8 hover:bg-white hover:text-black transition-all duration-300">
+                                    <div className="flex justify-between items-start mb-12">
+                                        <Icon name="Zap" size={32} />
+                                        <Icon name="ArrowUpRight" size={20} className="opacity-0 group-hover:opacity-100 transition-opacity" />
+                                    </div>
+                                    <h3 className="font-display text-2xl uppercase">Demo</h3>
+                                    <p className="font-mono text-xs mt-2 opacity-60 group-hover:opacity-100">Hugging Face Space</p>
+                                </a>
+                            </FadeIn>
                         </div>
                     </section>
 
                     {/* 6. About / Contact */}
-                    <footer className="py-32 border-t border-white/10 px-6 md:px-12 bg-concrete/20">
+                    <footer className="py-24 md:py-32 border-t border-white/10 px-6 md:px-12 bg-concrete/20">
                         <div className="grid grid-cols-1 md:grid-cols-2 gap-16">
                             <div>
                                 <h2 className="font-display text-3xl uppercase mb-6">Built by Saketh Baddam</h2>
@@ -540,7 +626,7 @@
                                 </p>
                             </div>
                             <div className="flex flex-col items-start md:items-end justify-between">
-                                <a href="mailto:sakethbaddam10@gmail.com" className="font-display text-2xl md:text-3xl hover:text-cinematic-red transition-colors mb-8">
+                                <a href="mailto:sakethbaddam10@gmail.com" className="font-display text-xl md:text-3xl hover:text-cinematic-red transition-colors mb-8 break-all">
                                     sakethbaddam10@gmail.com
                                 </a>
                                 <div className="flex gap-6 font-mono text-xs uppercase tracking-widest text-gray-500">
@@ -550,7 +636,7 @@
                                 </div>
                             </div>
                         </div>
-                        <div className="mt-24 pt-8 border-t border-white/5 flex justify-between font-mono text-[10px] text-gray-600 uppercase">
+                        <div className="mt-24 pt-8 border-t border-white/5 flex flex-col md:flex-row justify-between font-mono text-[10px] text-gray-600 uppercase gap-4">
                             <span>© 2025 Saketh Baddam</span>
                             <span>Design: Cinematic Brutalist</span>
                         </div>
